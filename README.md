@@ -4,6 +4,11 @@
 
 Built at the AI Conference 2026 Day ZERO Hack Day, San Francisco.
 
+**Try it: https://optimile-glhbb1a4f-piretilver-ops-projects.vercel.app**
+
+Enter your own balances on the Dashboard — they stay in your browser's localStorage
+and are never sent anywhere except to the award-search and model APIs.
+
 You have points scattered across five loyalty programs. None of them is enough on its
 own, the transfer charts are opaque, award seats appear and vanish hourly, and
 "cents per point" is meaningless unless you know what the ticket costs in cash.
