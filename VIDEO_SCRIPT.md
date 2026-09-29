@@ -6,6 +6,10 @@ Structured to the three things the submission asks for:
 Read this from your phone. **Bold bracketed lines are what to DO** — do not read those
 out. Everything else is spoken.
 
+**Before you press record:** open the app in one Chrome tab and the five GitHub links
+(in Part 3b) in five more. Then the code section is just tab-switching, with the right
+lines already highlighted — no scrolling or hunting on camera.
+
 Short sentences on purpose. Pause at every full stop. If you lose your place, stop
 talking for two seconds and find it. Silence is invisible; rushing is not.
 
@@ -210,12 +214,15 @@ talking for two seconds and find it. Silence is invisible; rushing is not.
 
 *about 2 minutes*
 
-**[Switch to your editor. Open `lib/agent-tools.ts`, scroll to the top.]**
+**[Switch to the GitHub tab — link 1. Open all five links as tabs BEFORE you start
+recording, so you never have to hunt for a line on camera.]**
+
+Link 1 — https://github.com/piretilver-ops/optimile/blob/1067d3ab0a8950ccf8e0dbaad65dba333956ac65/lib/agent-tools.ts#L12-L121
 
 > This is the file that makes it work. It is the tool surface — everything the
 > agent is allowed to do.
 
-**[Scroll slowly through the five tool definitions, lines 14 to 120]**
+**[The five tool definitions are on screen — scroll slowly through them]**
 
 > Five tools. Search live award availability. Check transfer partners. Check
 > status matches. Price a shortfall. And value a redemption.
@@ -223,7 +230,9 @@ talking for two seconds and find it. Silence is invisible; rushing is not.
 > That is the whole vocabulary. I never tell it which one to use. It reads the
 > question and decides.
 
-**[Scroll to `valueRedemption`, around line 143]**
+**[Switch to tab 2]**
+
+Link 2 — https://github.com/piretilver-ops/optimile/blob/1067d3ab0a8950ccf8e0dbaad65dba333956ac65/lib/agent-tools.ts#L143-L190
 
 > And this is the decision I would defend hardest.
 >
@@ -233,7 +242,9 @@ talking for two seconds and find it. Silence is invisible; rushing is not.
 >
 > Every recommendation on that screen traces back to this function.
 
-**[Scroll to the comment at line 253, in `evaluatePointsPurchase`]**
+**[Switch to tab 3 — the highlighted lines are the comment]**
+
+Link 3 — https://github.com/piretilver-ops/optimile/blob/1067d3ab0a8950ccf8e0dbaad65dba333956ac65/lib/agent-tools.ts#L253-L262
 
 > Here is a real bug I fixed today, and the comment explains it.
 >
@@ -244,7 +255,9 @@ talking for two seconds and find it. Silence is invisible; rushing is not.
 >
 > The fix weighs the cash saved against the value of the balance you spend.
 
-**[Open `lib/seats-aero.ts`, scroll to the comment at line 118]**
+**[Switch to tab 4]**
+
+Link 4 — https://github.com/piretilver-ops/optimile/blob/1067d3ab0a8950ccf8e0dbaad65dba333956ac65/lib/seats-aero.ts#L118-L130
 
 > One more, because it nearly cost me the demo.
 >
@@ -255,7 +268,9 @@ talking for two seconds and find it. Silence is invisible; rushing is not.
 > So it sends one request per programme and merges the results. That comment is
 > there so the next person does not lose an hour to it.
 
-**[Open `app/api/agent/route.ts`, scroll to line 107]**
+**[Switch to tab 5]**
+
+Link 5 — https://github.com/piretilver-ops/optimile/blob/1067d3ab0a8950ccf8e0dbaad65dba333956ac65/app/api/agent/route.ts#L107-L135
 
 > And this is the loop. Up to twelve rounds. Ask the model, run whatever tools it
 > asked for, feed the results back, repeat until it has an answer — streaming
