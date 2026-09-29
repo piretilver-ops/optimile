@@ -5,7 +5,7 @@ import Header from "@/components/layout/Header";
 import { USER_PROGRAMS } from "@/lib/constants";
 import { LoyaltyProgram } from "@/lib/types";
 import { cn, formatNumber } from "@/lib/utils";
-import { blobToWav } from "@/lib/wav";
+import { isSpeechSupported, startSpeechRecognition } from "@/lib/speech";
 
 const STORAGE_KEY = "optimile_programs";
 
@@ -24,13 +24,6 @@ const EXAMPLES = [
   "Should I transfer my RevPoints, or keep them?",
   "My Finnair status match deadline — is it worth chasing?",
 ];
-
-type PlaudRecording = {
-  id: string;
-  name: string;
-  createdAt: string | null;
-  durationSeconds: number | null;
-};
 
 type ToolCall = { id: string; name: string; input: unknown; output?: string };
 
@@ -186,12 +179,11 @@ export default function AskPage() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
+  const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [recordings, setRecordings] = useState<PlaudRecording[] | null>(null);
-  const [loadingRecordings, setLoadingRecordings] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const stopListeningRef = useRef<(() => void) | null>(null);
+  const heardRef = useRef("");
   const bottomRef = useRef<HTMLDivElement>(null);
   // `ask` is captured by recorder.onstop when recording starts, so a closed-over
   // `busy`/`turns` would be frozen at that moment. Refs keep the guard and the
@@ -207,22 +199,19 @@ export default function AskPage() {
   // Without this, navigating away mid-recording leaves the browser's microphone
   // indicator lit until the tab closes.
   useEffect(() => {
-    const recorder = recorderRef;
     const inflight = abortRef;
+    const stopListening = stopListeningRef;
     return () => {
-      // Stop the agent run: leaving the page should not keep burning a 12-turn
-      // Opus run the user will never see.
+      // Leaving the page must not keep a 12-turn agent run burning, or leave the
+      // browser's microphone indicator lit.
       inflight.current?.abort();
-      // Clear onstop BEFORE stopping, or stopping here fires the handler and
-      // kicks off a transcription plus a fresh agent run after unmount.
-      if (recorder.current) recorder.current.onstop = null;
-      if (recorder.current?.state === "recording") recorder.current.stop();
-      recorder.current?.stream?.getTracks().forEach((track) => track.stop());
+      stopListening.current?.();
     };
   }, []);
 
   useEffect(() => {
     setPrograms(loadPrograms());
+    setSpeechSupported(isSpeechSupported());
   }, []);
 
   useEffect(() => {
@@ -350,106 +339,48 @@ export default function AskPage() {
     [programs]
   );
 
-  /** Records in the browser, sends the clip to Plaud for transcription, then asks the agent. */
-  const toggleRecording = useCallback(async () => {
+  /** Browser speech recognition — transcript streams into the box as you talk. */
+  const toggleListening = useCallback(() => {
     setVoiceError(null);
 
-    if (recording) {
-      recorderRef.current?.stop();
+    if (listening) {
+      stopListeningRef.current?.();
+      stopListeningRef.current = null;
+      setListening(false);
+      const heard = heardRef.current.trim();
+      if (heard) ask(heard);
       return;
     }
 
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(mediaStream);
-      const chunks: Blob[] = [];
+    heardRef.current = "";
+    const stop = startSpeechRecognition({
+      onTranscript: (text) => {
+        heardRef.current = text;
+        setInput(text);
+      },
+      onError: (message) => {
+        setVoiceError(message);
+        stopListeningRef.current = null;
+        setListening(false);
+      },
+      onEnd: () => {
+        // Chrome ends the session on its own after a silence.
+        stopListeningRef.current = null;
+        setListening(false);
+        const heard = heardRef.current.trim();
+        if (heard) ask(heard);
+      },
+    });
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-
-      recorder.onstop = async () => {
-        mediaStream.getTracks().forEach((track) => track.stop());
-        setRecording(false);
-        setTranscribing(true);
-        try {
-          // Chrome records webm, which Plaud rejects — re-encode to WAV first.
-          const recorded = new Blob(chunks, { type: recorder.mimeType });
-          const wav = await blobToWav(recorded);
-          const form = new FormData();
-          form.append("audio", wav, "question.wav");
-
-          const response = await fetch("/api/voice", { method: "POST", body: form });
-          // A platform timeout returns an HTML error page, so parsing before the
-          // ok-check turned "transcription timed out" into a JSON syntax error.
-          const raw = await response.text();
-          let payload: { text?: string; error?: string } = {};
-          try {
-            payload = JSON.parse(raw);
-          } catch {
-            payload = { error: `Transcription failed (${response.status})` };
-          }
-
-          if (!response.ok) {
-            setVoiceError(payload.error ?? `Transcription failed (${response.status})`);
-            return;
-          }
-          if (payload.text) ask(payload.text);
-        } catch (error) {
-          setVoiceError(error instanceof Error ? error.message : "Transcription failed");
-        } finally {
-          setTranscribing(false);
-        }
-      };
-
-      recorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      setVoiceError("Microphone access denied — check browser permissions.");
+    if (!stop) {
+      setSpeechSupported(false);
+      setVoiceError("This browser has no speech recognition — use Chrome, or type your question.");
+      return;
     }
-  }, [recording, ask]);
 
-  /** Pulls the user's recent Plaud recordings — the pin captures the brief, we read it. */
-  const loadRecordings = useCallback(async () => {
-    setVoiceError(null);
-    setLoadingRecordings(true);
-    try {
-      const response = await fetch("/api/plaud");
-      const payload = await response.json();
-      if (!response.ok) {
-        setVoiceError(payload.error ?? `Could not reach Plaud (${response.status})`);
-        return;
-      }
-      setRecordings(payload.recordings ?? []);
-    } catch (error) {
-      setVoiceError(error instanceof Error ? error.message : "Could not reach Plaud");
-    } finally {
-      setLoadingRecordings(false);
-    }
-  }, []);
-
-  const askFromRecording = useCallback(
-    async (recording: PlaudRecording) => {
-      setVoiceError(null);
-      setLoadingRecordings(true);
-      try {
-        const response = await fetch(`/api/plaud?id=${encodeURIComponent(recording.id)}`);
-        const payload = await response.json();
-        if (!response.ok) {
-          setVoiceError(payload.error ?? `Could not read that recording (${response.status})`);
-          return;
-        }
-        setRecordings(null);
-        if (payload.text) ask(payload.text);
-      } catch (error) {
-        setVoiceError(error instanceof Error ? error.message : "Could not read that recording");
-      } finally {
-        setLoadingRecordings(false);
-      }
-    },
-    [ask]
-  );
+    stopListeningRef.current = stop;
+    setListening(true);
+  }, [listening, ask]);
 
   return (
     <div className="flex flex-col h-full max-w-4xl">
@@ -487,7 +418,7 @@ export default function AskPage() {
             <button
               key={example}
               onClick={() => ask(example)}
-              disabled={busy || recording || transcribing}
+              disabled={busy || listening}
               className="text-left text-sm p-4 rounded-xl border border-border hover:border-accent hover:bg-accent-light transition-colors disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-transparent"
             >
               {example}
@@ -567,46 +498,6 @@ export default function AskPage() {
         <div ref={bottomRef} />
       </div>
 
-      {recordings && (
-        <div className="mb-4 rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold">Your Plaud recordings</h2>
-            <button
-              onClick={() => setRecordings(null)}
-              className="text-xs text-muted hover:text-accent"
-            >
-              close
-            </button>
-          </div>
-          {recordings.length === 0 ? (
-            <p className="text-sm text-muted">
-              No recordings found. Record a note on the pin, wait for it to sync, then try again.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {recordings.map((recording) => (
-                <li key={recording.id}>
-                  <button
-                    onClick={() => askFromRecording(recording)}
-                    disabled={loadingRecordings}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-accent-light hover:text-accent transition-colors disabled:opacity-40"
-                  >
-                    <span className="font-medium">{recording.name}</span>
-                    {recording.durationSeconds !== null && (
-                      <span className="text-muted">
-                        {" "}
-                        · {Math.floor(recording.durationSeconds / 60)}m{" "}
-                        {recording.durationSeconds % 60}s
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -615,40 +506,31 @@ export default function AskPage() {
         className="sticky bottom-0 bg-background pt-4 pb-2 mt-4"
       >
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={loadRecordings}
-            disabled={busy || loadingRecordings}
-            title="Use a note recorded on your Plaud pin"
-            className="px-4 py-3 rounded-xl border border-border bg-card text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
-          >
-            {loadingRecordings ? "…" : "📎 Plaud"}
-          </button>
-          <button
-            type="button"
-            onClick={toggleRecording}
-            disabled={busy || transcribing}
-            title={recording ? "Stop and transcribe" : "Ask out loud — transcribed by Plaud"}
-            className={cn(
-              "px-4 py-3 rounded-xl border text-sm font-medium transition-colors disabled:opacity-40",
-              recording
-                ? "border-red-300 bg-red-50 text-red-600"
-                : "border-border bg-card hover:border-accent hover:text-accent"
-            )}
-          >
-            {recording ? "◼ Stop" : transcribing ? "…" : "🎙"}
-          </button>
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={busy}
+              title={listening ? "Stop and ask" : "Ask out loud"}
+              className={cn(
+                "px-4 py-3 rounded-xl border text-sm font-medium transition-colors disabled:opacity-40",
+                listening
+                  ? "border-red-300 bg-red-50 text-red-600 animate-pulse"
+                  : "border-border bg-card hover:border-accent hover:text-accent"
+              )}
+            >
+              {listening ? "◼ Stop" : "🎙"}
+            </button>
+          )}
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              recording
-                ? "Listening… tell me what points you have and where you want to go"
-                : transcribing
-                  ? "Transcribing with Plaud…"
-                  : "Where do you want to go?"
+              listening
+                ? "Listening… say where you want to go"
+                : "Where do you want to go?"
             }
-            disabled={busy || recording || transcribing}
+            disabled={busy}
             className="flex-1 px-4 py-3 rounded-xl border border-border bg-card text-sm focus:outline-none focus:border-accent disabled:opacity-60"
           />
           <button
