@@ -4,7 +4,7 @@
 
 Built at the AI Conference 2026 Day ZERO Hack Day, San Francisco.
 
-**Try it: https://optimile-glhbb1a4f-piretilver-ops-projects.vercel.app**
+**Try it: https://optimile-app.vercel.app**
 
 Enter your own balances on the Dashboard — they stay in your browser's localStorage
 and are never sent anywhere except to the award-search and model APIs.

@@ -27,6 +27,21 @@ npm run dev --prefix optimile -- -p 3007
 
 Vajalikud võtmed `.env.local`-is: `ANTHROPIC_API_KEY`, `SEATS_AERO_API_KEY`.
 
+## Deploy
+
+Avalik aadress on **https://optimile-app.vercel.app** (püsiv alias).
+
+🔑 **Iga uus produktsiooni-deploy loob uue juhusliku aadressi ja alias JÄÄB vana
+deploy peale.** Pärast iga deploy'd tuleb alias käsitsi ümber suunata:
+
+```bash
+vercel deploy --prod --yes          # tagastab uue aadressi
+vercel alias set <uus-aadress> optimile-app.vercel.app
+```
+
+See on oluline ka sellepärast, et **saldod elavad localStorage'is aadressi kohta** —
+aadressi vahetus tähendab kasutaja jaoks tühja portfelli.
+
 ## seats.aero API lõksud (kontrollitud 29.09.2026)
 
 Need on päris käitumised, mitte oletused — kõik kolm põhjustasid vaikseid vigu:

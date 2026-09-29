@@ -12,7 +12,7 @@ npm run dev --prefix optimile -- -p 3007
 ```
 
 Live version, if you would rather demo the deployed app than localhost:
-**https://optimile-obm50zreo-piretilver-ops-projects.vercel.app**
+**https://optimile-app.vercel.app**
 (balances are per-browser, so enter yours on its Dashboard first)
 
 Checklist:
