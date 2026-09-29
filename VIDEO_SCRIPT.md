@@ -1,118 +1,151 @@
-# Optimile — what to say, word for word
+# Optimile — video script, word for word
 
-Read this from your phone. **Bold bracketed lines are what to DO** — don't read those out.
-Everything else is spoken.
+Structured to the three things the submission asks for:
+**1. The Problem · 2. Your Tech Stack · 3. Live Demo + Code**
+
+Read this from your phone. **Bold bracketed lines are what to DO** — do not read those
+out. Everything else is spoken.
 
 Short sentences on purpose. Pause at every full stop. If you lose your place, stop
-talking for two seconds and find it — silence is fine, rushing is not.
+talking for two seconds and find it. Silence is invisible; rushing is not.
 
 ---
 
-## 1 · Dashboard — about 45 seconds
+# PART 1 · THE PROBLEM
 
-**[Screen: https://optimile-app.vercel.app — the Dashboard, showing the five balances]**
+*about 1 minute*
+
+**[Screen: https://optimile-app.vercel.app — the Dashboard, five balances visible]**
 
 > Hi. This is Optimile.
 >
 > I want to fly business class more often, using points I already have.
 >
-> Here is my problem. I have points in five different programmes. SAS. Finnair.
+> Here is the problem. I have points in five different programmes. SAS. Finnair.
 > Lufthansa. Hilton. And Revolut.
 >
 > Eleven thousand here. Forty-nine thousand there. About a hundred and eighty
 > thousand points in total.
 >
-> And not one of those balances is big enough, on its own, for a long-haul
+> And not one of those balances, on its own, is big enough for a long-haul
 > business seat.
+
+> So the value is not in any one balance. It is in the combinations. Which balance
+> moves into which programme. At what ratio. On which airline. On the few dates
+> that actually have a seat.
 >
-> The value is in the combinations. Which balance moves into which programme. At
-> what ratio. On which airline. On the few dates that actually have a seat.
+> And all of that changes every single day. Award seats appear and disappear
+> hourly. Transfer ratios change without warning.
 >
-> That changes every day. Working it out by hand takes about forty minutes,
-> across five different websites. And by the weekend it is out of date.
+> Doing it by hand means five airline websites, a transfer chart, an availability
+> database, and a cash price to compare against. About forty minutes per trip.
+> And it is out of date by the weekend.
+
+> Why it matters: most people never do that work. So the points just sit there,
+> and eventually they expire. This is money people already own and cannot spend
+> properly.
 
 ---
 
-## 2 · Open the agent — about 30 seconds
+# PART 2 · TECH STACK
+
+*about 1 minute 30 — talk over the Dashboard, no clicking needed*
+
+> Let me tell you what this is built on, and specifically what each piece made
+> possible.
+
+> **Claude Opus 5, with tool use.** This is the part that could not have been
+> done another way.
+>
+> I did not write the search strategy. I gave the model five tools and let it
+> decide what to check. When my home airport returns nothing, it re-runs the
+> search from Helsinki, Copenhagen, Stockholm on its own. When my balance is too
+> small, it goes and checks whether a transfer closes the gap.
+>
+> To hard-code that, I would have to enumerate every route, every programme, every
+> transfer path in advance. With an agent, I describe the goal and it works out
+> which questions to ask.
+
+> **The seats.aero Partner API.** Real award seat inventory. Airlines do not
+> publish this — without that feed, every number in this demo would be a guess.
+
+> **Server-side web search.** This gives the cash price to compare against. Cents
+> per point is meaningless without it — a seat at two cents per point is only good
+> if the cash ticket is expensive.
+
+> **Streaming, over server-sent events.** This one is not cosmetic. The agent
+> takes about three minutes. Without streaming that is a three-minute spinner, and
+> nobody would trust it. With streaming you watch it work, step by step.
+
+> **The browser's own speech recognition,** for voice input. No API key, nothing
+> uploaded, no transcription job to wait for.
+
+> And **Next.js on Vercel**, which is how all of this got built and deployed in
+> one day.
+
+---
+
+# PART 3 · LIVE DEMO
+
+*about 4 minutes*
 
 **[Click "Ask Optimile" in the sidebar]**
 
-**[Point the cursor at the "Reasoning over" strip at the top]**
+**[Point the cursor at the "Reasoning over" strip]**
 
-> Optimile does that work in three minutes, and it shows you every step.
->
-> It starts from what I actually hold. These are my real balances — airline miles
-> and hotel points, valued together as one portfolio.
-
----
-
-## 3 · Start the search, and talk while it runs — about 3 minutes
+> It starts from what I actually hold. Real balances — airline miles and hotel
+> points, valued together as one portfolio.
 
 **[Click the first example: "I'm in San Francisco. Get me home to Europe…"]**
 
-> So let's ask it. I am in San Francisco right now. I want to get home to Europe.
+> So let's ask it. I am in San Francisco. I want to get home to Europe.
 >
 > This takes about three minutes, and I want you to watch what it does, because
 > this is the whole point.
 
-**[Cards start appearing. Point at each one as it shows up.]**
+**[Cards appear. Point at each one.]**
 
-> There. That first card is a live search for award seats.
->
-> This is a real database of award availability, and it is checking about a dozen
+> There. That first card is a live award seat search. It is checking about a dozen
 > European airports at the same time. Helsinki. Copenhagen. Stockholm. Frankfurt.
 > London.
 
-**[Click one card open so the JSON shows]**
+**[Click one card open so the raw data shows]**
 
 > And I can open any card and see exactly what it asked, and exactly what came
-> back. This is not the model remembering something. This is a live answer from a
-> real API, right now.
+> back. This is not the model recalling something from training. That is a live
+> API response, from a few seconds ago.
 
-> One thing you will see here. It gets nothing at all from Tallinn, which is my
-> home airport. That database barely covers small airports.
->
-> So it tries again from the nearest big hubs, on its own. I did not ask it to do
-> that. That fallback is built into the agent, because without it, the honest
-> answer would be "nothing available" — and that would be wrong.
+> Watch this one. It gets nothing from Tallinn, which is my home airport — that
+> database barely covers small airports. So it tries again from the nearest hubs,
+> by itself. Without that, the honest answer would be "nothing available", and it
+> would be wrong.
 
 **[Next card: transfer partners]**
 
-> Now it is checking my transfer partners. My Revolut points are flexible. They
-> can become Turkish miles, or Avios, or Flying Blue, or SAS points. Each one at a
-> different ratio, and each one worth a different amount.
+> Now it is checking my transfer partners. Revolut points are flexible — they can
+> become Turkish miles, or Avios, or Flying Blue, or SAS points. Each at a
+> different ratio, each worth a different amount.
 
-**[Next card: looking up cash fares]**
+**[Next card: cash fares]**
 
-> And this part is the one people skip.
->
-> It is searching the web for what this ticket actually costs in cash.
->
-> Because "cents per point" means nothing on its own. If I tell you a seat is two
-> cents per point, that is only good if the cash ticket is expensive. Without a
-> real price to compare against, the number is decoration.
+> And this is the step people skip. It is searching the web for what the ticket
+> actually costs in cash, so the comparison means something.
 
-**[If it is still running — extra material, use as much as you need:]**
+**[Extra material if it is still running — use as much as you need:]**
 
-> While it works, one thing about how this is built.
+> While that finishes — two things about how it is built, and I will show you both
+> in the code in a moment.
 >
 > The model never does the arithmetic. Cents per point is calculated by a tool, in
-> code. The agent collects the numbers, calls the function, and the ranking comes
-> back from real maths.
+> code. So I never have to wonder whether it did the division right.
 >
-> So I never have to wonder whether it did the division correctly. Every
-> recommendation traces back to numbers I can check.
-
-> And there is a second calculator. It answers the question people actually have,
-> which is: I am short of points. Is it cheaper to buy the points I am missing, or
-> just buy the ticket?
->
-> That is a real comparison, and most people get it wrong, because they forget
-> that the points they already hold are worth something too.
+> And there is a second calculator for the question people actually have: I am
+> short of points — is it cheaper to buy the ones I am missing, or just buy the
+> ticket?
 
 ---
 
-## 4 · The answer — about 90 seconds
+## The answer
 
 **[Scroll to the recommendation]**
 
@@ -125,102 +158,140 @@ talking for two seconds and find it — silence is fine, rushing is not.
 
 **[Scroll slowly through the table]**
 
-> Real dates. Real seat counts. And it tells me when the provider last refreshed
-> each row, so I know how fresh this is.
+> Real dates, real seat counts, and it tells me when each row was last refreshed.
 
-> Now here is the part I could never have worked out myself.
+> Now here is the part I could not have worked out myself.
 >
 > I only have eleven thousand EuroBonus points. Nowhere near sixty.
 >
-> But my Revolut points transfer one-to-one. That brings me to forty-one
-> thousand. Still eighteen thousand short.
+> But Revolut points transfer one to one. That brings me to forty-one thousand.
+> Still eighteen thousand short.
 >
 > And instead of stopping there, it priced the gap. Buying those missing points
 > costs about two hundred and fifty euros.
 >
-> So: a business class seat from San Francisco to Copenhagen, for two hundred and
+> So: a business class seat, San Francisco to Copenhagen, for two hundred and
 > fifty euros and no surcharges. The cash fare is in the low thousands.
 >
-> None of my five balances could book that seat. The combination could.
+> No single balance could book that seat. The combination could.
 
-**[Scroll to the part about what does not work]**
+**[Scroll to what does not work]**
 
-> It is just as clear about what does not work.
+> It is just as specific about what does not work.
 >
-> Lufthansa wants sixty-two thousand miles, plus about thirteen hundred euros in
-> surcharges. I have seventeen thousand, and there is no way to top it up.
+> Lufthansa wants sixty-two thousand miles plus about thirteen hundred euros in
+> surcharges, and I have seventeen thousand with no way to top it up.
 >
 > And look at this one. American Airlines, fifty-seven thousand five hundred
-> miles, which is the cheapest number on the whole page.
->
-> Zero seats left. It is phantom inventory. The price is real, the seat is not.
->
-> It checked, and it told me.
+> miles — the cheapest number on the page. Zero seats left. Phantom inventory.
+> The price is real, the seat is not. It checked, and it told me.
 
 ---
 
-## 5 · Voice — about 30 seconds
+## Voice
 
 **[Click the microphone button]**
 
-> I can also just ask it out loud.
+> I can also just ask out loud.
 
-**[Speak this into the app, slowly and clearly:]**
+**[Say this into the app, slowly and clearly:]**
 
 > "Should I transfer my Revolut points, or keep them?"
 
-**[The words appear in the box as you speak. When you stop, it submits itself.]**
+**[Words appear as you speak. It submits itself when you stop.]**
 
-> The words appear as I talk, and it sends the question when I stop. No API key,
-> nothing uploaded, no waiting for a transcription job.
+> The text appears as I talk, and it sends when I stop.
 
-**[Do NOT wait for this answer. Let it run in the background and keep talking —
-move straight to section 6.]**
+**[Do NOT wait for the answer. Leave it running and go straight to the code.]**
 
 ---
 
-## 6 · Why you can trust it — about 60 seconds
+# PART 3b · THE CODE
 
-**[Open a "Computing cents-per-point" card]**
+*about 2 minutes*
 
-> Two decisions make this trustworthy.
->
-> First, as I said: the maths is in code, not in the model's head. You can open
-> this card and see the numbers that went in, and the ranking that came out.
+**[Switch to your editor. Open `lib/agent-tools.ts`, scroll to the top.]**
 
-> Second, and this matters more.
+> This is the file that makes it work. It is the tool surface — everything the
+> agent is allowed to do.
+
+**[Scroll slowly through the five tool definitions, lines 14 to 120]**
+
+> Five tools. Search live award availability. Check transfer partners. Check
+> status matches. Price a shortfall. And value a redemption.
 >
-> This morning, my award data subscription expired in the middle of building
-> this. The agent got an error.
+> That is the whole vocabulary. I never tell it which one to use. It reads the
+> question and decides.
+
+**[Scroll to `valueRedemption`, around line 143]**
+
+> And this is the decision I would defend hardest.
 >
-> And its answer was, and I am quoting it: "I have zero live availability, and I
-> am not going to invent it." Then it told me exactly what to fix.
+> This function is where cents per point is calculated. In code. The agent
+> gathers the inputs, calls this, and the ranking comes back from real
+> arithmetic — not from a language model doing mental maths.
 >
-> An agent that recommends a flight which does not exist is worse than no agent
-> at all. This one is built to fail loudly.
+> Every recommendation on that screen traces back to this function.
+
+**[Scroll to the comment at line 253, in `evaluatePointsPurchase`]**
+
+> Here is a real bug I fixed today, and the comment explains it.
+>
+> The points you already hold are not free. If you pay cash, you keep them. My
+> first version forgot that, and it told me to buy fourteen euros of points to
+> avoid a two hundred euro fare — while burning ninety-nine thousand points worth
+> nearly a thousand euros.
+>
+> The fix weighs the cash saved against the value of the balance you spend.
+
+**[Open `lib/seats-aero.ts`, scroll to the comment at line 118]**
+
+> One more, because it nearly cost me the demo.
+>
+> That availability API takes exactly one programme per request. If you send it a
+> list, it returns success and zero rows. No error. Just silence that looks
+> exactly like "no seats available".
+>
+> So it sends one request per programme and merges the results. That comment is
+> there so the next person does not lose an hour to it.
+
+**[Open `app/api/agent/route.ts`, scroll to line 107]**
+
+> And this is the loop. Up to twelve rounds. Ask the model, run whatever tools it
+> asked for, feed the results back, repeat until it has an answer — streaming
+> every step to the browser as it happens.
+>
+> About two hundred lines. That is the whole agent.
 
 ---
 
-## 7 · Who pays, and close — about 45 seconds
+# CLOSE
 
-> People already pay for this. Point dot me charges a hundred and twenty-nine
-> dollars a year for award search, and two hundred dollars per person for a
-> booking. So the demand is proven.
->
-> My first customer is award booking agents. They do this research by hand, all
-> day, and charge per ticket for it. Forty minutes down to three is margin
-> straight to their bottom line.
->
-> The second is people like me, with points spread across programmes.
->
-> One thing I will not do is take credit card affiliate money. That funds most of
-> this industry, and it is why so much points advice quietly pushes you toward
-> whoever pays the referral. The whole point of this is that the numbers are
-> honest. Being paid to prefer one programme would break it.
+*about 45 seconds*
 
-> There are no accounts yet. Your balances stay in your own browser and never
-> reach my server. Points are money, and a database of everyone's balances is a
-> liability I did not want on day one.
+**[Back to the browser]**
+
+> One more thing, and it is the reason I would use this myself.
+>
+> This morning my award data subscription expired in the middle of building. The
+> agent got an error. And its answer was, quoting it: "I have zero live
+> availability, and I am not going to invent it." Then it told me what to fix.
+>
+> An agent that recommends a flight which does not exist is worse than no agent.
+> This one is built to fail loudly.
+
+> On the business side: people already pay for this. Point dot me charges a
+> hundred and twenty-nine dollars a year, and two hundred dollars per booking. My
+> first customer is award booking agents — they do this by hand all day and charge
+> per ticket. Forty minutes down to three is margin.
+>
+> What I will not take is credit card affiliate money. That funds most of this
+> industry, and it is why so much points advice quietly steers you toward whoever
+> pays the referral. The whole value here is that the numbers are honest.
+
+> There are no accounts yet. Your balances stay in your browser and never reach my
+> server. Points are money, and a database of everyone's balances is a liability I
+> did not want on day one.
 >
 > That is Optimile. Built today, on live data. Thank you.
 
@@ -228,16 +299,15 @@ move straight to section 6.]**
 
 ## If something goes wrong
 
-**The search returns an error.** Do not stop recording. Say this:
+**The search errors.** Do not stop recording. Say:
 
-> And there you go — that is exactly what I was talking about. The data source
+> And there you go — that is exactly what I was describing. The data source
 > failed, and instead of inventing a flight, it told me. That is the behaviour I
 > want.
 
-Then carry on to section six.
+Then go straight to the code section.
 
-**The microphone does not work.** Skip section five entirely. Type the question
-instead and say nothing about it.
+**The microphone does not work.** Skip the voice part. Say nothing about it.
 
-**You lose your place.** Stop. Breathe. Find the line. Two seconds of silence is
-invisible in the final video.
+**You lose your place.** Stop. Breathe. Find the line. Two seconds of silence
+disappears in the final video.
