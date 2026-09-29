@@ -14,6 +14,20 @@ export interface LoyaltyProgram {
   lastUpdated: string | null; // ISO date string
 }
 
+/**
+ * Some currencies can be topped up with cash. That turns a shortfall into a
+ * buy-or-pay-cash decision rather than a dead end, so the agent needs to know
+ * the price and the ceiling.
+ */
+export interface PointsPurchaseOption {
+  programId: string;
+  pricePer1000Eur: number;
+  /** Cheaper standing-order rate, when the program offers one. */
+  recurringPricePer1000Eur: number | null;
+  maxPerTransaction: number;
+  notes: string;
+}
+
 export interface RevolutPartner {
   programName: string;
   currency: string;

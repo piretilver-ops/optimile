@@ -14,6 +14,7 @@ const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   get_transfer_partners: { icon: "💳", label: "Checking RevPoints transfer partners" },
   get_status_matches: { icon: "⭐", label: "Checking open status matches" },
   value_redemption: { icon: "🧮", label: "Computing cents-per-point" },
+  evaluate_points_purchase: { icon: "🛒", label: "Pricing the shortfall" },
   web_search: { icon: "🌐", label: "Looking up cash fares" },
 };
 
@@ -48,12 +49,28 @@ function loadPrograms(): LoyaltyProgram[] {
   }
 }
 
+function isHttpUrl(candidate: string): boolean {
+  try {
+    const parsed = new URL(candidate.replace(/&amp;/g, "&"));
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Minimal markdown → HTML: headings, bold, bullets, paragraphs. Enough for agent output. */
 function renderMarkdown(md: string): string {
+  // Quotes MUST be escaped too. The link rule below interpolates a captured URL
+  // into a double-quoted href, so an unescaped " in that URL closes the attribute
+  // and everything after it becomes live attributes on the <a> — an onmouseover
+  // handler, for instance. The agent's answers can carry text lifted from web
+  // search results, so this input is not trustworthy.
   const escaped = md
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
   const lines = escaped.split("\n");
   const out: string[] = [];
@@ -64,9 +81,12 @@ function renderMarkdown(md: string): string {
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
       .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-card text-[0.85em]">$1</code>')
-      .replace(
-        /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-        '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accent underline">$1</a>'
+      // Character class excludes quotes and whitespace as a second line of defence,
+      // and the href is only emitted once the URL parses as http(s).
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)"'\s]+)\)/g, (match, label: string, url: string) =>
+        isHttpUrl(url)
+          ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-accent underline">${label}</a>`
+          : label
       );
 
   const cells = (row: string) =>

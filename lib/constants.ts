@@ -1,4 +1,4 @@
-import { LoyaltyProgram, RevolutPartner } from './types';
+import { LoyaltyProgram, RevolutPartner, PointsPurchaseOption } from './types';
 
 export const USER_PROGRAMS: LoyaltyProgram[] = [
   {
@@ -75,6 +75,26 @@ export const USER_PROGRAMS: LoyaltyProgram[] = [
     icon: '💳',
     loginUrl: 'https://app.revolut.com/home',
     lastUpdated: null,
+  },
+];
+
+/**
+ * Currencies the user can buy outright. Price is the headline rate — set it from
+ * what Revolut actually quotes; a wrong rate here produces a confidently wrong
+ * recommendation, so it is deliberately one obvious place to edit.
+ */
+export const POINTS_PURCHASE: PointsPurchaseOption[] = [
+  {
+    programId: 'revolut-ultra',
+    // Revolut quotes 15,000 points for EUR 240 one-off, or EUR 204 on a monthly
+    // standing order (-32%). Normalised per 1,000 points: 240/15 and 204/15.
+    pricePer1000Eur: 16,
+    recurringPricePer1000Eur: 13.6,
+    maxPerTransaction: 200000,
+    notes:
+      'RevPoints can be bought on demand and then transferred 1:1 to partner programs. ' +
+      'Buying costs 1.6 cents per point one-off, or 1.36 cents on a monthly standing order, ' +
+      'so a purchase only pays off when the redemption is worth more per point than that.',
   },
 ];
 

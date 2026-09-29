@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { REVOLUT_PARTNERS, USER_PROGRAMS, SEATS_AERO_SOURCES } from "./constants";
+import { REVOLUT_PARTNERS, USER_PROGRAMS, SEATS_AERO_SOURCES, POINTS_PURCHASE } from "./constants";
 import { STATUS_MATCHES } from "@/data/status-matches";
 import { searchAwardFlights, parseMileageCost, SOURCE_NAMES } from "./seats-aero";
 import { LoyaltyProgram } from "./types";
@@ -60,6 +60,29 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
       "List currently open status matches and challenges the user qualifies for, with deadlines and requirements. " +
       "Use this when the user asks about status, lounge access, or when a deadline is close enough to matter.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "evaluate_points_purchase",
+    description:
+      "When the user is short of points for a redemption, work out whether BUYING the shortfall beats paying cash for the ticket. " +
+      "Call this instead of dismissing an option as unaffordable — a shortfall is a price, not a wall. " +
+      "Returns the cost of the gap, the all-in cost of the award (bought points + taxes), and how that compares to the cash fare. " +
+      "If the configured price is zero or unknown the tool says so; do NOT guess a price.",
+    input_schema: {
+      type: "object",
+      properties: {
+        programId: {
+          type: "string",
+          description: "Program whose points would be bought, e.g. revolut-ultra",
+        },
+        pointsNeeded: { type: "number", description: "Total points the redemption costs" },
+        pointsHeld: { type: "number", description: "Points the user already has available for it" },
+        taxesEur: { type: "number", description: "Cash taxes and surcharges paid on top of the award" },
+        cashFareEur: { type: "number", description: "What the same ticket costs in cash" },
+      },
+      required: ["programId", "pointsNeeded", "pointsHeld", "taxesEur", "cashFareEur"],
+      additionalProperties: false,
+    },
   },
   {
     name: "value_redemption",
@@ -143,6 +166,87 @@ function valueRedemption(options: ValueOption[]) {
   return {
     ranked: scored,
     note: "cpp = (cashFareEur - taxesEur) * 100 / milesRequired. Computed in code, not estimated.",
+  };
+}
+
+function evaluatePointsPurchase(input: {
+  programId: string;
+  pointsNeeded: number;
+  pointsHeld: number;
+  taxesEur: number;
+  cashFareEur: number;
+}) {
+  const option = POINTS_PURCHASE.find((o) => o.programId === input.programId);
+  if (!option) {
+    return {
+      purchasable: false,
+      reason: `${input.programId} points cannot be bought — the shortfall has to be earned or the award skipped.`,
+    };
+  }
+  if (option.pricePer1000Eur <= 0) {
+    return {
+      purchasable: true,
+      priceKnown: false,
+      reason:
+        "This currency can be bought, but no purchase price is configured. Ask the user what Revolut " +
+        "currently quotes per 1,000 points before recommending a purchase. Do not estimate it.",
+      maxPerTransaction: option.maxPerTransaction,
+    };
+  }
+
+  const shortfall = Math.max(0, input.pointsNeeded - input.pointsHeld);
+  const overCeiling = shortfall > option.maxPerTransaction;
+
+  // What the redemption returns per point. Buying only makes sense when this
+  // exceeds the purchase price per point — that comparison is the whole decision.
+  const redemptionCpp =
+    input.pointsNeeded > 0 ? ((input.cashFareEur - input.taxesEur) * 100) / input.pointsNeeded : 0;
+
+  const scenario = (label: string, pricePer1000: number) => {
+    const purchaseCost = (shortfall / 1000) * pricePer1000;
+    const allInCost = purchaseCost + input.taxesEur;
+    return {
+      label,
+      pricePer1000Eur: pricePer1000,
+      purchaseCostPerPointCents: Number((pricePer1000 / 10).toFixed(2)),
+      purchaseCostEur: Number(purchaseCost.toFixed(2)),
+      allInCostEur: Number(allInCost.toFixed(2)),
+      savingVsCashEur: Number((input.cashFareEur - allInCost).toFixed(2)),
+      beatsBuyingThePoints: redemptionCpp > pricePer1000 / 10,
+    };
+  };
+
+  const scenarios = [scenario("one-off purchase", option.pricePer1000Eur)];
+  if (option.recurringPricePer1000Eur !== null) {
+    scenarios.push(scenario("monthly standing order", option.recurringPricePer1000Eur));
+  }
+
+  const best = scenarios.reduce((a, b) => (b.savingVsCashEur > a.savingVsCashEur ? b : a));
+
+  let verdict: string;
+  if (shortfall === 0) verdict = "no purchase needed — the balance already covers it";
+  else if (!best.beatsBuyingThePoints)
+    verdict = `not worth buying — the redemption returns ${redemptionCpp.toFixed(2)}c per point but the points cost ${best.purchaseCostPerPointCents}c. Pay cash for the ticket.`;
+  else if (best.savingVsCashEur <= 0)
+    verdict = "not worth buying — buying the gap plus taxes costs more than the cash fare";
+  else
+    verdict = `worth buying via ${best.label} — saves ${best.savingVsCashEur.toFixed(0)} EUR against the cash fare`;
+
+  return {
+    purchasable: true,
+    priceKnown: true,
+    shortfall,
+    redemptionValuePerPointCents: Number(redemptionCpp.toFixed(2)),
+    scenarios,
+    bestScenario: best.label,
+    cashFareEur: Number(input.cashFareEur.toFixed(2)),
+    taxesEur: Number(input.taxesEur.toFixed(2)),
+    exceedsPerTransactionCeiling: overCeiling,
+    ceilingNote: overCeiling
+      ? `Shortfall exceeds the ${option.maxPerTransaction.toLocaleString("en-US")} per-transaction ceiling — would need more than one purchase.`
+      : null,
+    verdict,
+    notes: option.notes,
   };
 }
 
@@ -259,6 +363,11 @@ export async function executeTool(
             url: m.url,
           })),
         });
+
+      case "evaluate_points_purchase":
+        return JSON.stringify(
+          evaluatePointsPurchase(input as Parameters<typeof evaluatePointsPurchase>[0])
+        );
 
       case "value_redemption":
         return JSON.stringify(valueRedemption((input as { options: ValueOption[] }).options));
