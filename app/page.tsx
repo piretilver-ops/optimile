@@ -59,8 +59,11 @@ export default function DashboardPage() {
   const [editValue, setEditValue] = useState("");
   const [mounted, setMounted] = useState(false);
 
-  // Load from localStorage on mount
+  // Reading localStorage after mount is deliberate: it is not available during
+  // server rendering, so seeding state from it directly would desynchronise the
+  // server and client markup. The lint rule cannot see that distinction.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrograms(loadPrograms());
     setMounted(true);
   }, []);

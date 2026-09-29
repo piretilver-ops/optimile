@@ -66,35 +66,56 @@ export async function POST(request: NextRequest) {
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
 
+  // Without this the agent runs to completion after the user closes the tab —
+  // up to 12 model turns, 6 web searches and every seats.aero fan-out, all billed
+  // for an answer nobody will read. It also makes enqueue() throw on a cancelled
+  // controller, which escapes as an unhandled rejection.
+  let aborted = false;
+
   const stream = new ReadableStream({
+    cancel() {
+      aborted = true;
+    },
     async start(controller) {
       const send = (event: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (aborted) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          aborted = true;
+        }
       };
 
       const messages: Anthropic.MessageParam[] = [...body.messages];
+      // Only a tool round-trip starts genuinely new prose. A pause_turn resume
+      // continues the SAME sentence, so a separator there lands mid-thought.
+      let previousIterationUsedTools = false;
 
       try {
-        for (let i = 0; i < MAX_ITERATIONS; i++) {
-          const modelStream = client.messages.stream({
-            model: MODEL,
-            max_tokens: 16000,
-            thinking: { type: "adaptive", display: "summarized" },
-            output_config: { effort: "high" },
-            system: [
-              {
-                type: "text",
-                text: systemPrompt(programs),
-                cache_control: { type: "ephemeral" },
-              },
-            ],
-            tools: [...AGENT_TOOLS, WEB_SEARCH_TOOL] as Anthropic.ToolUnion[],
-            messages,
-          });
+        for (let i = 0; i < MAX_ITERATIONS && !aborted; i++) {
+          const modelStream = client.messages.stream(
+            {
+              model: MODEL,
+              max_tokens: 16000,
+              thinking: { type: "adaptive", display: "summarized" },
+              output_config: { effort: "high" },
+              system: [
+                {
+                  type: "text",
+                  text: systemPrompt(programs),
+                  cache_control: { type: "ephemeral" },
+                },
+              ],
+              tools: [...AGENT_TOOLS, WEB_SEARCH_TOOL] as Anthropic.ToolUnion[],
+              messages,
+            },
+            { signal: request.signal }
+          );
 
           // Separate this iteration's prose from the previous one, so a preamble
           // written before a tool call doesn't run into the final answer.
-          if (i > 0) send({ type: "text", delta: "\n\n" });
+          if (previousIterationUsedTools) send({ type: "text", delta: "\n\n" });
+          previousIterationUsedTools = false;
 
           modelStream.on("text", (delta) => send({ type: "text", delta }));
           modelStream.on("thinking", (delta) => send({ type: "thinking", delta }));
@@ -144,6 +165,7 @@ export async function POST(request: NextRequest) {
           }
 
           messages.push({ role: "assistant", content: response.content });
+          previousIterationUsedTools = true;
 
           // Show the work: every tool call is surfaced in the UI as it happens.
           for (const tool of toolUses) {
@@ -174,7 +196,11 @@ export async function POST(request: NextRequest) {
         const message = error instanceof Error ? error.message : "Unknown error";
         send({ type: "error", message });
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by the client disconnecting — nothing to do.
+        }
       }
     },
   });

@@ -5,7 +5,7 @@ import Header from "@/components/layout/Header";
 import { searchAirports } from "@/data/airport-codes";
 import { Airport } from "@/lib/types";
 import { CABIN_CLASSES } from "@/lib/constants";
-import { SOURCE_NAMES } from "@/lib/seats-aero";
+import { SOURCE_NAMES, cabinData, type Cabin, type SeatsAeroAvailability } from "@/lib/seats-aero";
 import { formatNumber, cn } from "@/lib/utils";
 
 function AirportInput({
@@ -65,18 +65,8 @@ function AirportInput({
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getCabinData(result: any, cabin: string) {
-  const C: Record<string, string> = { economy: "Y", premium: "W", business: "J", first: "F" };
-  const c = C[cabin] || "J";
-  return {
-    available: result[`${c}Available`] as boolean,
-    miles: result[`${c}MileageCost`] as number | null,
-    tax: result[`${c}TotalTaxes`] as number | null,
-    seats: result[`${c}RemainingSeats`] as number | null,
-    direct: result[`${c}Direct`] as boolean,
-    airlines: result[`${c}Airlines`] as string | null,
-  };
+function getCabinData(result: SeatsAeroAvailability, cabin: string) {
+  return cabinData(result, cabin as Cabin);
 }
 
 const SEARCH_SOURCES = [
@@ -348,7 +338,9 @@ export default function SearchPage() {
                       </p>
                       <p className="text-xs text-muted">
                         miles
-                        {data.tax ? ` + $${data.tax.toFixed(0)} tax` : ""}
+                        {data.taxes
+                          ? ` + ${data.taxes.toFixed(2)} ${data.taxesCurrency} tax`
+                          : ""}
                       </p>
                       {data.seats !== null && data.seats !== undefined && (
                         <p

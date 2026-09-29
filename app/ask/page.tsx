@@ -26,7 +26,18 @@ const EXAMPLES = [
 ];
 
 type ToolCall = { id: string; name: string; input: unknown; output?: string };
+
+/** Everything /api/agent can put on the wire. */
+type AgentEvent =
+  | { type: "text"; delta: string }
+  | { type: "thinking"; delta: string }
+  | { type: "tool_start"; id: string; name: string; input: unknown }
+  | { type: "tool_end"; id: string; name: string; output: string }
+  | { type: "error"; message: string }
+  | { type: "done"; stop_reason: string | null };
 type Turn = {
+  /** Stable identity so a stream patches its OWN turn, never "the last one". */
+  id: string;
   role: "user" | "assistant";
   text: string;
   thinking?: string;
@@ -173,6 +184,25 @@ export default function AskPage() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // `ask` is captured by recorder.onstop when recording starts, so a closed-over
+  // `busy`/`turns` would be frozen at that moment. Refs keep the guard and the
+  // history honest no matter how old the closure is.
+  const busyRef = useRef(false);
+  const turnsRef = useRef<Turn[]>([]);
+
+  useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
+
+  // Without this, navigating away mid-recording leaves the browser's microphone
+  // indicator lit until the tab closes.
+  useEffect(() => {
+    const recorder = recorderRef;
+    return () => {
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      recorder.current?.stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     setPrograms(loadPrograms());
@@ -187,27 +217,39 @@ export default function AskPage() {
 
   const ask = useCallback(
     async (question: string) => {
-      if (!question.trim() || busy) return;
+      if (!question.trim() || busyRef.current) return;
+      busyRef.current = true;
       setBusy(true);
       setInput("");
 
-      const history: { role: "user" | "assistant"; content: string }[] = turns
-        .filter((t) => t.text.trim().length > 0)
-        .map((t) => ({ role: t.role, content: t.text }));
+      // Drop failed exchanges as PAIRS. Filtering only on empty text removed the
+      // errored assistant turn but kept its user turn, leaving two consecutive
+      // user messages — which the API merges, so the model silently answered the
+      // failed question glued onto the new one.
+      const previousTurns = turnsRef.current;
+      const history: { role: "user" | "assistant"; content: string }[] = [];
+      for (let i = 0; i < previousTurns.length; i++) {
+        const turn = previousTurns[i];
+        if (turn.role !== "user") continue;
+        const answer = previousTurns[i + 1];
+        if (answer?.role === "assistant" && answer.text.trim().length > 0) {
+          history.push({ role: "user", content: turn.text });
+          history.push({ role: "assistant", content: answer.text });
+        }
+      }
       history.push({ role: "user", content: question });
 
+      const answerId = crypto.randomUUID();
       setTurns((prev) => [
         ...prev,
-        { role: "user", text: question },
-        { role: "assistant", text: "", tools: [] },
+        { id: crypto.randomUUID(), role: "user", text: question },
+        { id: answerId, role: "assistant", text: "", tools: [] },
       ]);
 
+      // Patch by id, not by position: if a second stream ever starts, "the last
+      // turn" is no longer this stream's turn and the two would interleave.
       const patchLast = (fn: (turn: Turn) => Turn) =>
-        setTurns((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = fn(next[next.length - 1]);
-          return next;
-        });
+        setTurns((prev) => prev.map((t) => (t.id === answerId ? fn(t) : t)));
 
       try {
         const response = await fetch("/api/agent", {
@@ -218,7 +260,13 @@ export default function AskPage() {
 
         if (!response.ok || !response.body) {
           const detail = await response.text();
-          patchLast((t) => ({ ...t, error: detail || `HTTP ${response.status}` }));
+          let message = detail || `Request failed (${response.status})`;
+          try {
+            message = (JSON.parse(detail) as { error?: string }).error ?? message;
+          } catch {
+            // Not JSON — a platform error page, say. Keep the raw text.
+          }
+          patchLast((t) => ({ ...t, error: message }));
           return;
         }
 
@@ -237,7 +285,13 @@ export default function AskPage() {
           for (const chunk of chunks) {
             const line = chunk.split("\n").find((l) => l.startsWith("data: "));
             if (!line) continue;
-            const event = JSON.parse(line.slice(6));
+            let event: AgentEvent;
+            try {
+              // One malformed frame must not abandon the rest of the stream.
+              event = JSON.parse(line.slice(6)) as AgentEvent;
+            } catch {
+              continue;
+            }
 
             if (event.type === "text") {
               patchLast((t) => ({ ...t, text: t.text + event.delta }));
@@ -264,10 +318,11 @@ export default function AskPage() {
         const message = error instanceof Error ? error.message : "Request failed";
         patchLast((t) => ({ ...t, error: message }));
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
-    [busy, programs, turns]
+    [programs]
   );
 
   /** Records in the browser, sends the clip to Plaud for transcription, then asks the agent. */
@@ -300,7 +355,15 @@ export default function AskPage() {
           form.append("audio", wav, "question.wav");
 
           const response = await fetch("/api/voice", { method: "POST", body: form });
-          const payload = await response.json();
+          // A platform timeout returns an HTML error page, so parsing before the
+          // ok-check turned "transcription timed out" into a JSON syntax error.
+          const raw = await response.text();
+          let payload: { text?: string; error?: string } = {};
+          try {
+            payload = JSON.parse(raw);
+          } catch {
+            payload = { error: `Transcription failed (${response.status})` };
+          }
 
           if (!response.ok) {
             setVoiceError(payload.error ?? `Transcription failed (${response.status})`);
@@ -358,7 +421,8 @@ export default function AskPage() {
             <button
               key={example}
               onClick={() => ask(example)}
-              className="text-left text-sm p-4 rounded-xl border border-border hover:border-accent hover:bg-accent-light transition-colors"
+              disabled={busy || recording || transcribing}
+              className="text-left text-sm p-4 rounded-xl border border-border hover:border-accent hover:bg-accent-light transition-colors disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-transparent"
             >
               {example}
             </button>

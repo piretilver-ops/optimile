@@ -191,3 +191,44 @@ export const SOURCE_NAMES: Record<string, string> = {
   qantas: "Qantas FF",
   virginatlantic: "Virgin Atlantic",
 };
+
+export type Cabin = "economy" | "premium" | "business" | "first";
+
+/**
+ * seats.aero encodes every cabin as a letter prefix across six parallel fields.
+ * Reading them by building a template-literal key needs an `as` cast that
+ * suppresses type checking, and the two hand-written copies of that pattern had
+ * already drifted — one treated MileageCost as a number (it is a string) and
+ * taxes as major units (they are minor), rendering $462.60 as "$46260".
+ * This table keeps the mapping in one place and correctly typed by construction.
+ */
+const CABIN_FIELDS = {
+  economy: { available: "YAvailable", miles: "YMileageCost", taxes: "YTotalTaxes", seats: "YRemainingSeats", direct: "YDirect", airlines: "YAirlines" },
+  premium: { available: "WAvailable", miles: "WMileageCost", taxes: "WTotalTaxes", seats: "WRemainingSeats", direct: "WDirect", airlines: "WAirlines" },
+  business: { available: "JAvailable", miles: "JMileageCost", taxes: "JTotalTaxes", seats: "JRemainingSeats", direct: "JDirect", airlines: "JAirlines" },
+  first: { available: "FAvailable", miles: "FMileageCost", taxes: "FTotalTaxes", seats: "FRemainingSeats", direct: "FDirect", airlines: "FAirlines" },
+} as const satisfies Record<Cabin, Record<string, keyof SeatsAeroAvailability>>;
+
+export interface CabinData {
+  available: boolean;
+  miles: number | null;
+  /** Already converted out of minor units, in `taxesCurrency`. */
+  taxes: number;
+  taxesCurrency: string;
+  seats: number | null;
+  direct: boolean;
+  airlines: string | null;
+}
+
+export function cabinData(row: SeatsAeroAvailability, cabin: Cabin): CabinData {
+  const field = CABIN_FIELDS[cabin];
+  return {
+    available: row[field.available],
+    miles: parseMileageCost(row[field.miles]),
+    taxes: (row[field.taxes] ?? 0) / 100,
+    taxesCurrency: row.TaxesCurrency,
+    seats: row[field.seats],
+    direct: row[field.direct],
+    airlines: row[field.airlines] || null,
+  };
+}

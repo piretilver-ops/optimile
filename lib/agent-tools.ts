@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { REVOLUT_PARTNERS, USER_PROGRAMS, SEATS_AERO_SOURCES, POINTS_PURCHASE } from "./constants";
 import { STATUS_MATCHES } from "@/data/status-matches";
-import { searchAwardFlights, parseMileageCost, SOURCE_NAMES } from "./seats-aero";
+import { searchAwardFlights, cabinData, SOURCE_NAMES } from "./seats-aero";
 import { LoyaltyProgram } from "./types";
 
 /**
@@ -138,7 +138,19 @@ type ValueOption = {
 function valueRedemption(options: ValueOption[]) {
   const scored = options.map((o) => {
     const program = USER_PROGRAMS.find((p) => p.id === o.programId);
-    const baseline = program?.baselineCpp ?? 1.0;
+    // get_transfer_partners hands the model seven partner programs that are not in
+    // USER_PROGRAMS. Silently defaulting their baseline to 1.0 made a mediocre
+    // Turkish redemption (own range 1.5-2.5) score as "clearly beats cash", so an
+    // unknown id is reported rather than guessed.
+    const partner = program
+      ? null
+      : REVOLUT_PARTNERS.find(
+          (rp) => rp.programName.toLowerCase().replace(/[^a-z]/g, "").includes(
+            o.programId.toLowerCase().replace(/[^a-z]/g, "")
+          )
+        );
+    const baseline = program?.baselineCpp ?? partner?.baselineCppLow ?? 1.0;
+    const baselineSource = program ? "portfolio" : partner ? "transfer partner" : "assumed default";
     const netCash = o.cashFareEur - o.taxesEur;
     const cpp = o.milesRequired > 0 ? (netCash * 100) / o.milesRequired : 0;
     const ratio = baseline > 0 ? cpp / baseline : 0;
@@ -150,7 +162,11 @@ function valueRedemption(options: ValueOption[]) {
 
     return {
       label: o.label,
-      program: program?.name ?? o.programId,
+      program: program?.name ?? partner?.programName ?? o.programId,
+      baselineSource,
+      ...(baselineSource === "assumed default" && {
+        warning: `No baseline value is known for "${o.programId}" — 1.0c was assumed, so treat timesBaseline as unreliable and say so.`,
+      }),
       milesRequired: o.milesRequired,
       taxesEur: Number(o.taxesEur.toFixed(2)),
       cashFareEur: Number(o.cashFareEur.toFixed(2)),
@@ -212,7 +228,9 @@ function evaluatePointsPurchase(input: {
       purchaseCostEur: Number(purchaseCost.toFixed(2)),
       allInCostEur: Number(allInCost.toFixed(2)),
       savingVsCashEur: Number((input.cashFareEur - allInCost).toFixed(2)),
-      beatsBuyingThePoints: redemptionCpp > pricePer1000 / 10,
+      // Informational only: whether stockpiling points at this price would pay off
+      // in general. It must NOT gate the buy-the-gap decision — see the verdict below.
+      worthStockpilingSpeculatively: redemptionCpp > pricePer1000 / 10,
     };
   };
 
@@ -223,14 +241,17 @@ function evaluatePointsPurchase(input: {
 
   const best = scenarios.reduce((a, b) => (b.savingVsCashEur > a.savingVsCashEur ? b : a));
 
+  // The decision is MARGINAL: only `shortfall` points are being bought, and the
+  // points already held are sunk. So the verdict must come from the all-in
+  // comparison (cost of the gap + taxes vs the cash fare), never from average
+  // cents-per-point — with a near-full balance the average can sit below the
+  // purchase price while buying the last few points is obviously right.
   let verdict: string;
   if (shortfall === 0) verdict = "no purchase needed — the balance already covers it";
-  else if (!best.beatsBuyingThePoints)
-    verdict = `not worth buying — the redemption returns ${redemptionCpp.toFixed(2)}c per point but the points cost ${best.purchaseCostPerPointCents}c. Pay cash for the ticket.`;
   else if (best.savingVsCashEur <= 0)
-    verdict = "not worth buying — buying the gap plus taxes costs more than the cash fare";
+    verdict = `not worth buying — the gap costs ${best.purchaseCostEur.toFixed(0)} EUR plus ${input.taxesEur.toFixed(0)} EUR taxes, more than the ${input.cashFareEur.toFixed(0)} EUR cash fare`;
   else
-    verdict = `worth buying via ${best.label} — saves ${best.savingVsCashEur.toFixed(0)} EUR against the cash fare`;
+    verdict = `worth buying via ${best.label} — ${best.allInCostEur.toFixed(0)} EUR all-in against a ${input.cashFareEur.toFixed(0)} EUR cash fare, saving ${best.savingVsCashEur.toFixed(0)} EUR`;
 
   return {
     purchasable: true,
@@ -265,7 +286,6 @@ async function searchAvailability(
     return { error: "seats.aero API key not configured on the server." };
   }
 
-  const cabinKey = { economy: "Y", premium: "W", business: "J", first: "F" }[input.cabin];
   const destinations = input.destinations.slice(0, 6);
 
   const results = await Promise.all(
@@ -284,20 +304,20 @@ async function searchAvailability(
         );
 
         const flights = (data.data || [])
-          .filter((a) => a[`${cabinKey}Available` as keyof typeof a])
-          .map((a) => ({
-            date: a.Date,
-            route: `${a.Route.OriginAirport}-${a.Route.DestinationAirport}`,
-            program: SOURCE_NAMES[a.Source] ?? a.Source,
-            source: a.Source,
-            miles: parseMileageCost(a[`${cabinKey}MileageCost` as keyof typeof a] as string | null),
-            // seats.aero reports taxes as minor units of a per-row currency — not always EUR.
-            taxes: ((a[`${cabinKey}TotalTaxes` as keyof typeof a] as number | null) ?? 0) / 100,
-            taxesCurrency: a.TaxesCurrency,
-            seatsLeft: a[`${cabinKey}RemainingSeats` as keyof typeof a] ?? null,
-            direct: a[`${cabinKey}Direct` as keyof typeof a] ?? false,
-            airlines: a[`${cabinKey}Airlines` as keyof typeof a] || null,
-            lastSeenByProvider: a.UpdatedAt?.slice(0, 10) ?? null,
+          .map((row) => ({ row, cabin: cabinData(row, input.cabin) }))
+          .filter(({ cabin }) => cabin.available)
+          .map(({ row, cabin }) => ({
+            date: row.Date,
+            route: `${row.Route.OriginAirport}-${row.Route.DestinationAirport}`,
+            program: SOURCE_NAMES[row.Source] ?? row.Source,
+            source: row.Source,
+            miles: cabin.miles,
+            taxes: cabin.taxes,
+            taxesCurrency: cabin.taxesCurrency,
+            seatsLeft: cabin.seats,
+            direct: cabin.direct,
+            airlines: cabin.airlines,
+            lastSeenByProvider: row.UpdatedAt?.slice(0, 10) ?? null,
           }))
           .filter((f) => f.miles !== null && f.miles > 0)
           .sort((a, b) => (a.miles ?? 0) - (b.miles ?? 0))
