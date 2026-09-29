@@ -1,6 +1,6 @@
 # Optimile — hack day video script
 
-**Target: 7–8 minutes** (limit is 10; judges rarely reward the full length).
+**Target: 8 minutes** (limit is 10; judges rarely reward the full length).
 Submission: video → hackersquad.io. Deadline 15:30 PDT, 29 Sep 2026.
 
 ---
@@ -10,6 +10,10 @@ Submission: video → hackersquad.io. Deadline 15:30 PDT, 29 Sep 2026.
 ```bash
 npm run dev --prefix optimile -- -p 3007
 ```
+
+Live version, if you would rather demo the deployed app than localhost:
+**https://optimile-hq5lf9klr-piretilver-ops-projects.vercel.app**
+(balances are per-browser, so enter yours on its Dashboard first)
 
 Checklist:
 - [ ] `.env.local` has both `ANTHROPIC_API_KEY` and `SEATS_AERO_API_KEY`
@@ -69,7 +73,26 @@ Then scroll to the business-class section:
 
 > "And it tells me what I *can't* have, with numbers. Lufthansa business out of SFO wants 88,850 miles — I have seventeen thousand — plus **twelve hundred and eighty euros** in surcharges. The cheap American Airlines rows at 57,500? **Zero seats left.** They're phantom inventory. It checked."
 
-## 6:00 – 7:00 · How it works — the two decisions worth stealing
+## 6:00 – 6:40 · The follow-up that shows the real product
+
+Type the second question: *"What about business class? I can buy more RevPoints."*
+
+When it answers, point at the 🛒 **Pricing the shortfall** card.
+
+> "Business was out of reach — I'm a hundred thousand points short. But RevPoints can
+> be bought: 15,000 for €240, or €204 on a standing order. So the agent stops asking
+> 'can she afford it' and starts asking 'is buying the gap cheaper than the ticket'.
+>
+> It works out the shortfall costs €1,423 on the standing-order rate, plus taxes,
+> against a €2,100 cash fare. **Buying the points wins by about €680.** And it's
+> honest about the one-off rate being worse — at 1.6 cents a point that one loses.
+>
+> That's the difference between a calculator and an advisor. A shortfall isn't a wall,
+> it's a price."
+
+---
+
+## 6:40 – 7:20 · How it works — the two decisions worth stealing
 
 **1. The model never does the arithmetic.**
 
@@ -85,7 +108,7 @@ Open a `Computing cents-per-point` card to show the inputs and the returned rank
 
 ---
 
-## 7:00 – 7:45 · Where it goes
+## 7:20 – 8:00 · Where it goes
 
 > "Today the balances are typed in. The obvious next step is connecting programs directly, so anyone can plug in their points and get this answer without knowing what a transfer partner is.
 >
@@ -93,7 +116,7 @@ Open a `Computing cents-per-point` card to show the inputs and the returned rank
 
 ---
 
-## 7:45 – 8:00 · Close
+## 8:00 – 8:15 · Close
 
 > "Optimile. Built today, on live data. Thanks."
 
