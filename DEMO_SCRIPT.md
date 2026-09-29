@@ -12,7 +12,7 @@ npm run dev --prefix optimile -- -p 3007
 ```
 
 Live version, if you would rather demo the deployed app than localhost:
-**https://optimile-hq5lf9klr-piretilver-ops-projects.vercel.app**
+**https://optimile-obm50zreo-piretilver-ops-projects.vercel.app**
 (balances are per-browser, so enter yours on its Dashboard first)
 
 Checklist:
@@ -21,6 +21,8 @@ Checklist:
 - [ ] Browser zoom ~110%, window ~1400px wide, close other tabs
 - [ ] Run the SFO question **once before recording** — it warms the prompt cache and confirms seats.aero is answering
 - [ ] Hide bookmarks bar, mute notifications
+- [ ] Record in **Chrome** — the voice button needs its speech recognition
+- [ ] Click 🎙 once before recording so the mic permission prompt is already answered
 
 **Timing note:** the big SFO question takes ~3 minutes. That is intentional screen time — you narrate over it. Do not cut it out; watching an agent work is the demo.
 
@@ -73,7 +75,23 @@ Then scroll to the business-class section:
 
 > "And it tells me what I *can't* have, with numbers. Lufthansa business out of SFO wants 88,850 miles — I have seventeen thousand — plus **twelve hundred and eighty euros** in surcharges. The cheap American Airlines rows at 57,500? **Zero seats left.** They're phantom inventory. It checked."
 
-## 6:00 – 6:40 · The follow-up that shows the real product
+## 5:50 – 6:10 · Ask it out loud
+
+Click the 🎙 button and speak the follow-up instead of typing it:
+
+> *"What about business class? I can buy more Revolut points if that helps."*
+
+The words appear in the box as you say them, and it submits itself when you stop.
+
+> "No API key, no upload, no waiting on a transcription job — the browser does it,
+> so the answer starts before you've finished the sentence."
+
+(If the mic misfires, just type it. The button hides itself in browsers without
+speech recognition, so use Chrome.)
+
+---
+
+## 6:10 – 6:50 · The follow-up that shows the real product
 
 Type the second question: *"What about business class? I can buy more RevPoints."*
 
@@ -92,7 +110,7 @@ When it answers, point at the 🛒 **Pricing the shortfall** card.
 
 ---
 
-## 6:40 – 7:20 · How it works — the two decisions worth stealing
+## 6:50 – 7:30 · How it works — the two decisions worth stealing
 
 **1. The model never does the arithmetic.**
 
@@ -108,7 +126,7 @@ Open a `Computing cents-per-point` card to show the inputs and the returned rank
 
 ---
 
-## 7:20 – 8:00 · Where it goes
+## 7:30 – 8:05 · Where it goes
 
 > "Today the balances are typed in. The obvious next step is connecting programs directly, so anyone can plug in their points and get this answer without knowing what a transfer partner is.
 >
@@ -116,7 +134,7 @@ Open a `Computing cents-per-point` card to show the inputs and the returned rank
 
 ---
 
-## 8:00 – 8:15 · Close
+## 8:05 – 8:20 · Close
 
 > "Optimile. Built today, on live data. Thanks."
 
