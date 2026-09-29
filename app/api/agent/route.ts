@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AGENT_TOOLS, WEB_SEARCH_TOOL, executeTool, portfolioSummary } from "@/lib/agent-tools";
 import { USER_PROGRAMS } from "@/lib/constants";
 import { LoyaltyProgram } from "@/lib/types";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export const maxDuration = 300;
 
@@ -43,6 +44,14 @@ export async function POST(request: NextRequest) {
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
       status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const limit = checkRateLimit(clientIp(request));
+  if (!limit.ok) {
+    return new Response(JSON.stringify({ error: limit.reason }), {
+      status: 429,
       headers: { "Content-Type": "application/json" },
     });
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { plaudCredentials, transcribe, probeAccess, PlaudGateError } from "@/lib/plaud";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export const maxDuration = 300;
 
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
   if (!creds) {
     return NextResponse.json({ error: "Plaud credentials not configured" }, { status: 503 });
   }
+
+  const limit = checkRateLimit(clientIp(request));
+  if (!limit.ok) return NextResponse.json({ error: limit.reason }, { status: 429 });
 
   const formData = await request.formData();
   const file = formData.get("audio");
