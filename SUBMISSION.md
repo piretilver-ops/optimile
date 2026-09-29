@@ -115,11 +115,11 @@ If Brave Search gets added before the deadline, tick **Brave**.
 If you decide to tick **Plaud**, append this to the README so the claim is honest:
 
 ```
-I also built a Plaud Embedded integration. Authentication, user tokens and
-multipart upload to their storage are all verified working, but their
-Transcription API returns 403 DEVICE_MISSING until a device is bound through
-their native iOS/Android SDK — which a web build cannot do. The code path is
-complete and the repo documents exactly where the platform stops it.
+A Plaud Embedded integration is also built. Authentication, user tokens and
+multipart upload to Plaud storage are verified working, but their Transcription
+API returns 403 DEVICE_MISSING until a device is bound through their native
+iOS/Android SDK, which a web build cannot do. The code path is complete and the
+repo documents exactly where the platform stops it.
 ```
 
 ## GIT.REMOTE
