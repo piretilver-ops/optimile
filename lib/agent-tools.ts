@@ -103,7 +103,12 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
               programId: {
                 type: "string",
                 description:
-                  "One of: sas-eurobonus, finnair-plus, miles-and-more, hilton-honors, revolut-ultra",
+                  "For a redemption paid from a balance the user already holds, use the portfolio id: " +
+                  "sas-eurobonus, finnair-plus, miles-and-more, hilton-honors, revolut-ultra. " +
+                  "For a redemption reached by TRANSFERRING RevPoints, pass the DESTINATION programme's " +
+                  "name exactly as get_transfer_partners returns it (e.g. \"Turkish Miles&Smiles\", " +
+                  "\"Avianca LifeMiles\") — not revolut-ultra, because the destination programme has its " +
+                  "own baseline value and using RevPoints' 1.0c would overstate the result.",
               },
               milesRequired: { type: "number" },
               taxesEur: { type: "number", description: "Cash surcharges and taxes paid on top of the miles" },
@@ -178,7 +183,11 @@ function valueRedemption(options: ValueOption[]) {
     };
   });
 
-  scored.sort((a, b) => b.cpp - a.cpp);
+  // Rank by value RELATIVE to each programme's own baseline. Raw cpp is not
+  // comparable across programmes — Hilton's baseline is 0.5c and SAS's is 1.2c,
+  // so sorting by cpp can put an option its own verdict calls "poor" above one
+  // it calls "good".
+  scored.sort((a, b) => b.timesBaseline - a.timesBaseline);
   return {
     ranked: scored,
     note: "cpp = (cashFareEur - taxesEur) * 100 / milesRequired. Computed in code, not estimated.",
@@ -241,15 +250,29 @@ function evaluatePointsPurchase(input: {
 
   const best = scenarios.reduce((a, b) => (b.savingVsCashEur > a.savingVsCashEur ? b : a));
 
-  // The decision is MARGINAL: only `shortfall` points are being bought, and the
-  // points already held are sunk. So the verdict must come from the all-in
-  // comparison (cost of the gap + taxes vs the cash fare), never from average
-  // cents-per-point — with a near-full balance the average can sit below the
-  // purchase price while buying the last few points is obviously right.
+  // The points already held are NOT sunk: paying cash keeps them. So buying the
+  // gap is only right when the cash it saves exceeds the value of the balance the
+  // redemption burns. Without this, a near-full balance against a cheap fare
+  // looks like a win — buy 1,000 points for EUR 14 to avoid a EUR 200 fare, while
+  // spending 99,000 points worth EUR 990.
+  const heldProgram = USER_PROGRAMS.find((p) => p.id === input.programId);
+  const heldBaselineCpp = heldProgram?.baselineCpp ?? null;
+  const pointsBurnedValueEur =
+    heldBaselineCpp === null ? null : (input.pointsHeld * heldBaselineCpp) / 100;
+
+  const netCashSaved = input.cashFareEur - input.taxesEur - best.purchaseCostEur;
+  const beatsHoldingThePoints =
+    pointsBurnedValueEur === null ? best.savingVsCashEur > 0 : netCashSaved > pointsBurnedValueEur;
+
   let verdict: string;
   if (shortfall === 0) verdict = "no purchase needed — the balance already covers it";
   else if (best.savingVsCashEur <= 0)
     verdict = `not worth buying — the gap costs ${best.purchaseCostEur.toFixed(0)} EUR plus ${input.taxesEur.toFixed(0)} EUR taxes, more than the ${input.cashFareEur.toFixed(0)} EUR cash fare`;
+  else if (!beatsHoldingThePoints && pointsBurnedValueEur !== null)
+    verdict =
+      `not worth buying — it saves ${netCashSaved.toFixed(0)} EUR of cash but spends ` +
+      `${input.pointsHeld.toLocaleString("en-US")} points worth about ${pointsBurnedValueEur.toFixed(0)} EUR. ` +
+      `Pay cash and keep the balance for a redemption that returns more per point.`;
   else
     verdict = `worth buying via ${best.label} — ${best.allInCostEur.toFixed(0)} EUR all-in against a ${input.cashFareEur.toFixed(0)} EUR cash fare, saving ${best.savingVsCashEur.toFixed(0)} EUR`;
 
@@ -258,6 +281,12 @@ function evaluatePointsPurchase(input: {
     priceKnown: true,
     shortfall,
     redemptionValuePerPointCents: Number(redemptionCpp.toFixed(2)),
+    pointsHeldSpent: input.pointsHeld,
+    pointsHeldValueEur: pointsBurnedValueEur === null ? null : Number(pointsBurnedValueEur.toFixed(2)),
+    netCashSavedEur: Number(netCashSaved.toFixed(2)),
+    ...(heldBaselineCpp === null && {
+      warning: `No baseline value is known for "${input.programId}", so the cost of spending the existing balance could not be weighed. Say so.`,
+    }),
     scenarios,
     bestScenario: best.label,
     cashFareEur: Number(input.cashFareEur.toFixed(2)),
@@ -327,6 +356,9 @@ async function searchAvailability(
           destination,
           found: flights.length,
           flights,
+          ...(data.failedSources?.length && {
+            partialResult: `These programmes errored and are missing from this result: ${data.failedSources.join(", ")}. Say so rather than implying the search was complete.`,
+          }),
           ...(flights.length === 0 && {
             note:
               `seats.aero has no cached award data for ${input.origin.toUpperCase()}-${destination.toUpperCase()}. ` +

@@ -5,7 +5,12 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 export const maxDuration = 300;
 
 /** GET /api/voice — diagnostic probe: are the credentials good, and is transcription gated? */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Each probe mints two Plaud tokens and submits a transcription — real spend
+  // on the owner's account, so it gets the same cap as every other route.
+  const limit = checkRateLimit(clientIp(request));
+  if (!limit.ok) return NextResponse.json({ error: limit.reason }, { status: 429 });
+
   const creds = plaudCredentials();
   if (!creds) {
     return NextResponse.json(
@@ -45,10 +50,21 @@ export async function POST(request: NextRequest) {
     const text = await transcribe(creds, audio, filetype, "optimile-demo-user");
     return NextResponse.json({ text });
   } catch (error) {
+    // Upstream messages embed up to 400 bytes of Plaud's raw response, which is
+    // internal detail no anonymous caller should see. Log it, return the gist.
+    console.error("[voice] transcription failed:", error);
+
     if (error instanceof PlaudGateError) {
-      return NextResponse.json({ error: error.message }, { status: error.status >= 400 ? error.status : 500 });
+      const gated = error.status === 403;
+      return NextResponse.json(
+        {
+          error: gated
+            ? "Voice transcription needs a Plaud device bound through their mobile SDK, which this web build cannot do."
+            : "Transcription is unavailable right now.",
+        },
+        { status: error.status >= 400 ? error.status : 500 }
+      );
     }
-    const message = error instanceof Error ? error.message : "Transcription failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Transcription failed." }, { status: 500 });
   }
 }

@@ -81,6 +81,8 @@ export interface SeatsAeroSearchResponse {
   count: number;
   hasMore: boolean;
   cursor: string | null;
+  /** Sources whose request failed while others succeeded — partial result. */
+  failedSources?: string[];
 }
 
 async function fetchOneSource(
@@ -123,27 +125,55 @@ export async function searchAwardFlights(
   params: SeatsAeroSearchParams,
   apiKey: string
 ): Promise<SeatsAeroSearchResponse> {
-  const sources = params.sources?.filter(Boolean) ?? [];
+  // One upstream request is issued per source, so an unvalidated caller-supplied
+  // list is an amplifier: `sources=finnair,finnair,...` x5000 would fire 5000
+  // authenticated calls at seats.aero.
+  //
+  // The cap is what defends against that — NOT an allowlist. seats.aero adds
+  // sources faster than this file can track them (SOURCE_NAMES is a display-name
+  // table, not a registry: it is missing british, jetblue and aeromexico among
+  // others), so filtering against it would silently drop valid programmes and
+  // widen a search the caller meant to narrow. Validate the shape, dedupe, cap.
+  const sources = [...new Set(params.sources ?? [])]
+    .filter((source) => /^[a-z][a-z0-9]{1,30}$/.test(source))
+    .slice(0, 8);
 
   if (sources.length <= 1) {
     return fetchOneSource(params, sources[0], apiKey);
   }
 
-  const responses = await Promise.all(
+  // allSettled, not all: one 429 or 500 from a single programme must not throw
+  // away the rows the other five returned. The search page always sends six
+  // sources, so Promise.all turned one flaky upstream into a total failure.
+  const settled = await Promise.allSettled(
     sources.map((source) => fetchOneSource(params, source, apiKey))
   );
 
   const seen = new Set<string>();
   const data: SeatsAeroAvailability[] = [];
-  for (const response of responses) {
-    for (const row of response.data ?? []) {
+  const failedSources: string[] = [];
+
+  settled.forEach((outcome, index) => {
+    if (outcome.status === "rejected") {
+      failedSources.push(sources[index]);
+      return;
+    }
+    for (const row of outcome.value.data ?? []) {
       if (seen.has(row.ID)) continue;
       seen.add(row.ID);
       data.push(row);
     }
+  });
+
+  // Every source failing is a real failure — surface it rather than reporting
+  // "no award space", which is what an empty result set looks like.
+  if (failedSources.length === sources.length) {
+    throw new Error(
+      `seats.aero returned an error for every source (${failedSources.join(", ")})`
+    );
   }
 
-  return { data, count: data.length, hasMore: false, cursor: null };
+  return { data, count: data.length, hasMore: false, cursor: null, failedSources };
 }
 
 export async function getTrips(
@@ -190,6 +220,15 @@ export const SOURCE_NAMES: Record<string, string> = {
   etihad: "Etihad Guest",
   qantas: "Qantas FF",
   virginatlantic: "Virgin Atlantic",
+  british: "British Airways",
+  jetblue: "JetBlue",
+  aeromexico: "Aeromexico",
+  smiles: "Smiles",
+  velocity: "Velocity",
+  azul: "Azul",
+  connectmiles: "ConnectMiles",
+  saudia: "Saudia",
+  eurobonusshop: "EuroBonus Shop",
 };
 
 export type Cabin = "economy" | "premium" | "business" | "first";

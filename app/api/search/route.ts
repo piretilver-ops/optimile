@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchAwardFlights } from "@/lib/seats-aero";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+  // This route spends the seats.aero quota on every call, same as /api/agent.
+  const limit = checkRateLimit(clientIp(request));
+  if (!limit.ok) {
+    return NextResponse.json({ error: limit.reason }, { status: 429 });
+  }
+
   const searchParams = request.nextUrl.searchParams;
 
   const origin = searchParams.get("origin");

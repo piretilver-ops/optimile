@@ -25,6 +25,13 @@ const EXAMPLES = [
   "My Finnair status match deadline — is it worth chasing?",
 ];
 
+type PlaudRecording = {
+  id: string;
+  name: string;
+  createdAt: string | null;
+  durationSeconds: number | null;
+};
+
 type ToolCall = { id: string; name: string; input: unknown; output?: string };
 
 /** Everything /api/agent can put on the wire. */
@@ -182,6 +189,8 @@ export default function AskPage() {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [recordings, setRecordings] = useState<PlaudRecording[] | null>(null);
+  const [loadingRecordings, setLoadingRecordings] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   // `ask` is captured by recorder.onstop when recording starts, so a closed-over
@@ -189,6 +198,7 @@ export default function AskPage() {
   // history honest no matter how old the closure is.
   const busyRef = useRef(false);
   const turnsRef = useRef<Turn[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     turnsRef.current = turns;
@@ -198,7 +208,14 @@ export default function AskPage() {
   // indicator lit until the tab closes.
   useEffect(() => {
     const recorder = recorderRef;
+    const inflight = abortRef;
     return () => {
+      // Stop the agent run: leaving the page should not keep burning a 12-turn
+      // Opus run the user will never see.
+      inflight.current?.abort();
+      // Clear onstop BEFORE stopping, or stopping here fires the handler and
+      // kicks off a transcription plus a fresh agent run after unmount.
+      if (recorder.current) recorder.current.onstop = null;
       if (recorder.current?.state === "recording") recorder.current.stop();
       recorder.current?.stream?.getTracks().forEach((track) => track.stop());
     };
@@ -252,10 +269,15 @@ export default function AskPage() {
         setTurns((prev) => prev.map((t) => (t.id === answerId ? fn(t) : t)));
 
       try {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+
         const response = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: history, programs }),
+          signal: controller.signal,
         });
 
         if (!response.ok || !response.body) {
@@ -315,8 +337,11 @@ export default function AskPage() {
           }
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Request failed";
-        patchLast((t) => ({ ...t, error: message }));
+        // Navigating away aborts the fetch on purpose — not something to report.
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          const message = error instanceof Error ? error.message : "Request failed";
+          patchLast((t) => ({ ...t, error: message }));
+        }
       } finally {
         busyRef.current = false;
         setBusy(false);
@@ -384,6 +409,47 @@ export default function AskPage() {
       setVoiceError("Microphone access denied — check browser permissions.");
     }
   }, [recording, ask]);
+
+  /** Pulls the user's recent Plaud recordings — the pin captures the brief, we read it. */
+  const loadRecordings = useCallback(async () => {
+    setVoiceError(null);
+    setLoadingRecordings(true);
+    try {
+      const response = await fetch("/api/plaud");
+      const payload = await response.json();
+      if (!response.ok) {
+        setVoiceError(payload.error ?? `Could not reach Plaud (${response.status})`);
+        return;
+      }
+      setRecordings(payload.recordings ?? []);
+    } catch (error) {
+      setVoiceError(error instanceof Error ? error.message : "Could not reach Plaud");
+    } finally {
+      setLoadingRecordings(false);
+    }
+  }, []);
+
+  const askFromRecording = useCallback(
+    async (recording: PlaudRecording) => {
+      setVoiceError(null);
+      setLoadingRecordings(true);
+      try {
+        const response = await fetch(`/api/plaud?id=${encodeURIComponent(recording.id)}`);
+        const payload = await response.json();
+        if (!response.ok) {
+          setVoiceError(payload.error ?? `Could not read that recording (${response.status})`);
+          return;
+        }
+        setRecordings(null);
+        if (payload.text) ask(payload.text);
+      } catch (error) {
+        setVoiceError(error instanceof Error ? error.message : "Could not read that recording");
+      } finally {
+        setLoadingRecordings(false);
+      }
+    },
+    [ask]
+  );
 
   return (
     <div className="flex flex-col h-full max-w-4xl">
@@ -501,6 +567,46 @@ export default function AskPage() {
         <div ref={bottomRef} />
       </div>
 
+      {recordings && (
+        <div className="mb-4 rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">Your Plaud recordings</h2>
+            <button
+              onClick={() => setRecordings(null)}
+              className="text-xs text-muted hover:text-accent"
+            >
+              close
+            </button>
+          </div>
+          {recordings.length === 0 ? (
+            <p className="text-sm text-muted">
+              No recordings found. Record a note on the pin, wait for it to sync, then try again.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {recordings.map((recording) => (
+                <li key={recording.id}>
+                  <button
+                    onClick={() => askFromRecording(recording)}
+                    disabled={loadingRecordings}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-accent-light hover:text-accent transition-colors disabled:opacity-40"
+                  >
+                    <span className="font-medium">{recording.name}</span>
+                    {recording.durationSeconds !== null && (
+                      <span className="text-muted">
+                        {" "}
+                        · {Math.floor(recording.durationSeconds / 60)}m{" "}
+                        {recording.durationSeconds % 60}s
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -509,6 +615,15 @@ export default function AskPage() {
         className="sticky bottom-0 bg-background pt-4 pb-2 mt-4"
       >
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={loadRecordings}
+            disabled={busy || loadingRecordings}
+            title="Use a note recorded on your Plaud pin"
+            className="px-4 py-3 rounded-xl border border-border bg-card text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
+          >
+            {loadingRecordings ? "…" : "📎 Plaud"}
+          </button>
           <button
             type="button"
             onClick={toggleRecording}

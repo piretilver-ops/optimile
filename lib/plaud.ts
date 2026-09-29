@@ -218,7 +218,8 @@ export async function probeAccess(creds: PlaudCredentials): Promise<{
     partnerToken = await getPartnerToken(creds);
     await getUserToken(partnerToken, "optimile-probe-user");
   } catch (error) {
-    return { auth: error instanceof Error ? error.message : "unknown", transcription: "not reached" };
+    console.error("[plaud] auth probe failed:", error);
+    return { auth: "failed", transcription: "not reached" };
   }
 
   try {
@@ -238,7 +239,10 @@ export async function probeAccess(creds: PlaudCredentials): Promise<{
     return { auth: "ok", transcription: "ok" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
+    // The message carries raw upstream response text; keep it in the log, not
+    // in the HTTP response.
+    console.error("[plaud] transcription probe failed:", message);
     const gated = /bind|device|unlock|forbidden|not.*allow/i.test(message);
-    return { auth: "ok", transcription: gated ? "gated" : message };
+    return { auth: "ok", transcription: gated ? "gated" : "unavailable" };
   }
 }

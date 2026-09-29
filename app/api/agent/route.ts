@@ -59,9 +59,21 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as {
     messages: Anthropic.MessageParam[];
-    programs?: LoyaltyProgram[];
+    programs?: Partial<LoyaltyProgram>[];
   };
-  const programs = body.programs?.length ? body.programs : USER_PROGRAMS;
+
+  // portfolioSummary() renders these straight into the SYSTEM prompt, and this
+  // endpoint is public — so only the balance is taken from the request. Every
+  // other field comes from the hardcoded catalogue, which makes a crafted
+  // `programs` payload unable to inject system-level instructions.
+  const programs: LoyaltyProgram[] = USER_PROGRAMS.map((known) => {
+    const supplied = body.programs?.find((p) => p?.id === known.id);
+    const balance = Number(supplied?.balance);
+    return {
+      ...known,
+      balance: Number.isFinite(balance) && balance >= 0 ? Math.floor(balance) : 0,
+    };
+  });
 
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
