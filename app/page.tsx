@@ -63,6 +63,28 @@ export default function DashboardPage() {
   // server rendering, so seeding state from it directly would desynchronise the
   // server and client markup. The lint rule cannot see that distinction.
   useEffect(() => {
+    // Balances can be handed to another device through the URL *hash*. A hash
+    // fragment is never sent to the server, so the numbers stay out of request
+    // logs and referrer headers — unlike a query parameter, which would expose
+    // them to every proxy on the way. The hash is cleared straight after import
+    // so it does not linger in browser history.
+    const hash = window.location.hash;
+    if (hash.startsWith("#b=")) {
+      try {
+        const decoded = JSON.parse(atob(decodeURIComponent(hash.slice(3)))) as Record<string, number>;
+        savePrograms(
+          USER_PROGRAMS.map((program) => ({
+            ...program,
+            balance: Number(decoded[program.id]) || 0,
+            lastUpdated: new Date().toISOString(),
+          }))
+        );
+      } catch {
+        // A malformed link should do nothing, not wipe the balances already there.
+      }
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrograms(loadPrograms());
     setMounted(true);
