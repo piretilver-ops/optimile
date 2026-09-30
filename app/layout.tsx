@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +42,9 @@ export default function RootLayout({
           {/* Mobile bottom nav */}
           <MobileNav />
         </div>
+        {/* Serves its script and beacons from /_vercel/insights on this origin,
+            so the CSP's script-src 'self' and connect-src 'self' both allow it. */}
+        <Analytics />
       </body>
     </html>
   );
